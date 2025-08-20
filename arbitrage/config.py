@@ -10,7 +10,10 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     exchanges: Tuple[str, ...] = tuple(
-        os.getenv("EXCHANGES", "binance,kucoin").replace(" ", "").split(",")
+        os.getenv(
+            "EXCHANGES",
+            "binance,kucoin,kraken,bybit,okx,gate,bitfinex,htx,mexc,coinbase",
+        ).replace(" ", "").split(",")
     )
 
     # Arbitrage scanning defaults
@@ -20,6 +23,7 @@ class Settings:
     orderbook_ttl_seconds: int = int(os.getenv("ORDERBOOK_TTL", "5"))
     markets_ttl_seconds: int = int(os.getenv("MARKETS_TTL", "86400"))  # 1 day
     concurrency: int = int(os.getenv("CONCURRENCY", "16"))
+    pair_concurrency: int = int(os.getenv("PAIR_CONCURRENCY", "4"))
 
     # Cache
     cache_db_path: str = os.getenv("CACHE_DB_PATH", "/workspace/.cache/arbitrage_cache.sqlite3")

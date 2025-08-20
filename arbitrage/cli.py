@@ -4,11 +4,11 @@ import argparse
 import asyncio
 import json
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from .config import settings, Settings
 from .scanner import ArbitrageScanner
-from .utils import get_logger
+from .utils import get_logger, AsyncLimiter
 
 logger = get_logger("cli")
 
@@ -115,6 +115,30 @@ async def cmd_fetch_orderbooks(args, cfg: Settings):
             pass
 
 
+async def cmd_scan_all(args, cfg: Settings):
+    scanner = ArbitrageScanner(cfg)
+    exchanges = list(cfg.exchanges)
+
+    # Build all unique unordered pairs (A,B) with A < B
+    pairs: List[Tuple[str, str]] = []
+    for i in range(len(exchanges)):
+        for j in range(i + 1, len(exchanges)):
+            pairs.append((exchanges[i], exchanges[j]))
+
+    limiter = AsyncLimiter(cfg.pair_concurrency)
+
+    async def scan_pair(a: str, b: str):
+        async with limiter:
+            try:
+                ops = await scanner.scan_two_exchanges(a, b)
+                if not ops:
+                    logger.info("%s-%s: no ops above %.3f%%", a, b, cfg.min_profit_pct)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("%s-%s scan failed: %s", a, b, exc)
+
+    await asyncio.gather(*[scan_pair(a, b) for a, b in pairs])
+
+
 def main(argv: list[str] | None = None) -> int:
     use_uvloop_if_available()
 
@@ -138,6 +162,9 @@ def main(argv: list[str] | None = None) -> int:
     p_ob.add_argument("--exchange", required=True, help="Exchange id, e.g., kucoin, bybit, kraken")
     p_ob.add_argument("--sample", type=int, default=200, help="Limit to first N symbols (0=all)")
     p_ob.set_defaults(func=cmd_fetch_orderbooks)
+
+    p_all = sub.add_parser("scan-all", help="Scan all configured exchange pairs concurrently")
+    p_all.set_defaults(func=cmd_scan_all)
 
     args = parser.parse_args(argv)
 
